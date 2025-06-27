@@ -3,7 +3,7 @@
 
 // >>> IMPORTANT: Configure your league details here <<<
 const HARDCODED_LEAGUE_ID = '1181984921049018368'; // Replace with your current league ID
-const HARDCODED_END_YEAR = 2025; // Replace with the current or latest season year for your league
+// HARDCODED_END_YEAR is now determined dynamically from the API
 
 // Helper function to fetch data from Sleeper API
 async function fetchSleeperApi(url) {
@@ -42,47 +42,45 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    // startYear is now the only parameter passed from the frontend
-    const { startYear } = req.query;
-
-    if (!startYear) {
-        return res.status(400).json({ error: 'Missing required query parameter: startYear.' });
-    }
-
-    const start = parseInt(startYear);
-    const end = HARDCODED_END_YEAR; // Use the hardcoded end year
-
-    if (isNaN(start) || start > end) {
-        return res.status(400).json({ error: 'Invalid year range provided (startYear must be a number and less than or equal to hardcoded endYear).' });
-    }
-
     const leagueHistory = [];
     let currentProcessingLeagueId = HARDCODED_LEAGUE_ID; // Start with the hardcoded latest league ID
-    const fetchedSeasonIds = new Set(); // Keep track of league IDs already processed to prevent loops
+    const fetchedLeagueIds = new Set(); // Keep track of league IDs already processed to prevent infinite loops
+    let endYearDetermined = false;
+    let end; // This will store the dynamically determined end year
 
     try {
+        // First, fetch the initial league to determine the current season (end year)
+        let initialLeague;
+        try {
+            initialLeague = await fetchSleeperApi(`https://api.sleeper.app/v1/league/${HARDCODED_LEAGUE_ID}`);
+            end = parseInt(initialLeague.season); // Dynamically set the end year
+            endYearDetermined = true;
+        } catch (err) {
+            console.error(`Could not fetch initial league ${HARDCODED_LEAGUE_ID} to determine end year: ${err.message}`);
+            return res.status(500).json({ error: `Could not determine the latest season for your league. Please check if the League ID (${HARDCODED_LEAGUE_ID}) is valid: ${err.message}` });
+        }
+
         // Loop backward through the league history using 'previous_league_id'
-        while (currentProcessingLeagueId) {
+        while (currentProcessingLeagueId && !fetchedLeagueIds.has(currentProcessingLeagueId)) {
+            fetchedLeagueIds.add(currentProcessingLeagueId); // Add the current league ID to the set
+
             let league;
-            try {
-                league = await fetchSleeperApi(`https://api.sleeper.app/v1/league/${currentProcessingLeagueId}`);
-            } catch (err) {
-                console.warn(`Could not fetch league ${currentProcessingLeagueId}: ${err.message}`);
-                // If a specific league ID fails, break the chain as we can't go further back
-                break;
+            // If it's the initial league, we already fetched it. Otherwise, fetch it.
+            if (currentProcessingLeagueId === HARDCODED_LEAGUE_ID && initialLeague) {
+                league = initialLeague;
+            } else {
+                try {
+                    league = await fetchSleeperApi(`https://api.sleeper.app/v1/league/${currentProcessingLeagueId}`);
+                } catch (err) {
+                    console.warn(`Could not fetch league ${currentProcessingLeagueId}: ${err.message}`);
+                    break; // Stop processing if a league cannot be fetched in the chain
+                }
             }
 
             const season = parseInt(league.season);
 
-            // Stop if we've gone beyond the desired start year
-            if (season < start) {
-                break;
-            }
-
-            // Only process if the season is within the desired range and hasn't been fetched yet
-            if (season >= start && season <= end && !fetchedSeasonIds.has(currentProcessingLeagueId)) {
-                fetchedSeasonIds.add(currentProcessingLeagueId); // Add the league ID to the set
-
+            // Only collect data if the season is less than or equal to the dynamically determined end year
+            if (season <= end) {
                 const rosters = await fetchSleeperApi(`https://api.sleeper.app/v1/league/${currentProcessingLeagueId}/rosters`);
                 const users = await fetchSleeperApi(`https://api.sleeper.app/v1/league/${currentProcessingLeagueId}/users`);
 
