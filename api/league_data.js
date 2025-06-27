@@ -1,15 +1,18 @@
 // api/league_data.js
 // This file will be deployed as a Vercel Serverless Function.
 
+// >>> IMPORTANT: Configure your league details here <<<
+const HARDCODED_LEAGUE_ID = '1181984921049018368'; // Replace with your current league ID
+const HARDCODED_END_YEAR = 2025; // Replace with the current or latest season year for your league
+
 // Helper function to fetch data from Sleeper API
 async function fetchSleeperApi(url) {
     const response = await fetch(url);
     if (!response.ok) {
-        // Attempt to parse error message from response body
         let errorMsg = `Failed to fetch data from Sleeper API: ${response.status} ${response.statusText}`;
         try {
             const errorBody = await response.json();
-            errorMsg = errorBody.msg || errorMsg; // Sleeper API often uses 'msg' for errors
+            errorMsg = errorBody.msg || errorMsg;
         } catch (e) {
             // Ignore if response body is not JSON
         }
@@ -26,7 +29,7 @@ async function fetchSleeperApi(url) {
  */
 export default async function handler(req, res) {
     // Set CORS headers to allow requests from your frontend
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Adjust this to your specific frontend domain in production
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -39,21 +42,22 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { leagueId, startYear, endYear } = req.query;
+    // startYear is now the only parameter passed from the frontend
+    const { startYear } = req.query;
 
-    if (!leagueId || !startYear || !endYear) {
-        return res.status(400).json({ error: 'Missing required query parameters: leagueId, startYear, endYear.' });
+    if (!startYear) {
+        return res.status(400).json({ error: 'Missing required query parameter: startYear.' });
     }
 
     const start = parseInt(startYear);
-    const end = parseInt(endYear);
+    const end = HARDCODED_END_YEAR; // Use the hardcoded end year
 
-    if (isNaN(start) || isNaN(end) || start > end) {
-        return res.status(400).json({ error: 'Invalid year range provided.' });
+    if (isNaN(start) || start > end) {
+        return res.status(400).json({ error: 'Invalid year range provided (startYear must be a number and less than or equal to hardcoded endYear).' });
     }
 
     const leagueHistory = [];
-    let currentProcessingLeagueId = leagueId;
+    let currentProcessingLeagueId = HARDCODED_LEAGUE_ID; // Start with the hardcoded latest league ID
     const fetchedSeasonIds = new Set(); // Keep track of league IDs already processed to prevent loops
 
     try {
@@ -83,8 +87,6 @@ export default async function handler(req, res) {
                 const users = await fetchSleeperApi(`https://api.sleeper.app/v1/league/${currentProcessingLeagueId}/users`);
 
                 // Determine the number of regular season weeks for matchup fetching
-                // Sleeper's playoff_week_start indicates the first playoff week.
-                // Regular season goes up to playoff_week_start - 1. Default to 14 if not set.
                 const numRegularSeasonWeeks = league.settings.playoff_week_start ? (league.settings.playoff_week_start - 1) : 14;
                 const matchups = [];
                 for (let week = 1; week <= numRegularSeasonWeeks; week++) {
@@ -93,11 +95,10 @@ export default async function handler(req, res) {
                         matchups.push(weekMatchups);
                     } catch (matchupErr) {
                         console.warn(`Could not fetch regular season matchups for league ${currentProcessingLeagueId}, week ${week}: ${matchupErr.message}`);
-                        // Continue to next week if a week's matchups fail
                     }
                 }
 
-                // Fetch playoff matchups (from playoff_week_start to playoff_week_end)
+                // Fetch playoff matchups
                 const playoffMatchups = [];
                 if (league.settings.playoff_week_start && league.settings.playoff_week_end) {
                     for (let week = league.settings.playoff_week_start; week <= league.settings.playoff_week_end; week++) {
@@ -106,7 +107,6 @@ export default async function handler(req, res) {
                             playoffMatchups.push(weekPlayoffs);
                         } catch (playoffErr) {
                             console.warn(`Could not fetch playoff matchups for league ${currentProcessingLeagueId}, week ${week}: ${playoffErr.message}`);
-                            // Continue to next playoff week if a week's matchups fail
                         }
                     }
                 }
