@@ -3,9 +3,7 @@ import React, { useState, useEffect } from 'react';
 // Main App component
 const App = () => {
   // State variables for user inputs and fetched data
-  const [leagueId, setLeagueId] = useState('');
-  const [startYear, setStartYear] = useState('');
-  const [endYear, setEndYear] = useState('');
+  const [startYear, setStartYear] = useState(''); // Only startYear is user input now
   const [leagueHistory, setLeagueHistory] = useState([]); // Stores data for each season
   const [statistics, setStatistics] = useState({}); // Stores calculated statistics
   const [loading, setLoading] = useState(false); // Loading indicator
@@ -24,26 +22,27 @@ const App = () => {
     setError('');
     setLoading(true);
 
-    // Basic input validation
-    if (!leagueId || !startYear || !endYear) {
-      setError('Please fill in all fields: League ID, Start Year, and End Year.');
+    // Basic input validation - only startYear is required from frontend now
+    if (!startYear) {
+      setError('Please fill in the Start Season Year.');
       setLoading(false);
       return;
     }
 
     const start = parseInt(startYear);
-    const end = parseInt(endYear);
 
-    if (isNaN(start) || isNaN(end) || start > end || start < 2017) { // Sleeper data generally starts around 2017
-      setError('Invalid year range. Start year must be before or equal to end year, and after 2016.');
+    // Sleeper data generally starts around 2017.
+    // endYear is now hardcoded in the backend, so we only validate start.
+    if (isNaN(start) || start < 2017) {
+      setError('Invalid start year. Start year must be a number and after 2016.');
       setLoading(false);
       return;
     }
 
     try {
       // Construct the URL for your Vercel API route.
-      // This assumes your API route is at /api/league_data.
-      const apiUrl = `/api/league_data?leagueId=${leagueId}&startYear=${startYear}&endYear=${endYear}`;
+      // leagueId and endYear are now handled in the backend API.
+      const apiUrl = `/api/league_data?startYear=${startYear}`;
       const response = await fetch(apiUrl);
 
       if (!response.ok) {
@@ -56,7 +55,7 @@ const App = () => {
       calculateStatistics(data); // Calculate statistics after fetching data
     } catch (err) {
       console.error('Error fetching league data:', err);
-      setError(`Error fetching league data: ${err.message}. Please check your League ID and try again.`);
+      setError(`Error fetching league data: ${err.message}. Please check your backend setup.`);
     } finally {
       setLoading(false);
     }
@@ -182,20 +181,7 @@ const App = () => {
 
       <section className="bg-white bg-opacity-10 rounded-xl shadow-2xl p-8 max-w-2xl w-full mb-8 backdrop-blur-sm">
         <h2 className="text-3xl font-bold mb-6 text-green-100">Fetch League Data</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div>
-            <label htmlFor="leagueId" className="block text-green-200 text-sm font-medium mb-2">
-              Sleeper League ID:
-            </label>
-            <input
-              type="text"
-              id="leagueId"
-              className="w-full p-3 rounded-lg bg-green-800 border border-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-white placeholder-green-300 transition duration-300"
-              placeholder="e.g., 1234567890"
-              value={leagueId}
-              onChange={(e) => setLeagueId(e.target.value)}
-            />
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6 mb-6"> {/* Changed to 1 column */}
           <div>
             <label htmlFor="startYear" className="block text-green-200 text-sm font-medium mb-2">
               Start Season Year:
@@ -209,19 +195,7 @@ const App = () => {
               onChange={(e) => setStartYear(e.target.value)}
             />
           </div>
-          <div>
-            <label htmlFor="endYear" className="block text-green-200 text-sm font-medium mb-2">
-              End Season Year:
-            </label>
-            <input
-              type="number"
-              id="endYear"
-              className="w-full p-3 rounded-lg bg-green-800 border border-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-white placeholder-green-300 transition duration-300"
-              placeholder="e.g., 2023"
-              value={endYear}
-              onChange={(e) => setEndYear(e.target.value)}
-            />
-          </div>
+          {/* League ID and End Year inputs removed from here */}
         </div>
         <button
           onClick={fetchLeagueData}
